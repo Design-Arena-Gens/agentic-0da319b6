@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SignalStatus {
+  PENDING
+  ACTIVE
+  FILLED
+  CANCELLED
+  INVALIDATED
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  fullName      String
+  role          String   @default("analyst")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  apiKeys       ApiKey[]
+  accounts      Account[]
+  sessions      Session[]
+  auditLogs     AuditLog[]
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  label     String
+  secret    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  createdAt DateTime @default(now())
+  expiresAt DateTime?
+  lastUsed  DateTime?
+  scopes    String[]
+}
+
+model Account {
+  id              String           @id @default(cuid())
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  broker          String
+  accountNumber   String           @unique
+  environment     String           @default("paper")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  balanceSnapshots BalanceSnapshot[]
+  positions       Position[]
+  signals         Signal[]
+}
+
+model BalanceSnapshot {
+  id        String   @id @default(cuid())
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String
+  balance   Float
+  equity    Float
+  timestamp DateTime @default(now())
+}
+
+model Position {
+  id            String    @id @default(cuid())
+  account       Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId     String
+  symbol        String
+  quantity      Float
+  avgPrice      Float
+  side          String
+  status        String
+  openedAt      DateTime
+  closedAt      DateTime?
+  pnl           Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  executions    Execution[]
+}
+
+model Execution {
+  id         String    @id @default(cuid())
+  position   Position  @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  positionId String
+  price      Float
+  quantity   Float
+  side       String
+  timestamp  DateTime  @default(now())
+}
+
+model Signal {
+  id            String        @id @default(cuid())
+  account       Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId     String
+  title         String
+  description   String
+  symbol        String
+  direction     String
+  entryPrice    Float
+  stopLoss      Float
+  takeProfit    Float
+  confidence    Float
+  riskReward    Float
+  status        SignalStatus   @default(PENDING)
+  metadata      Json
+  generatedBy   String
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  orderFlow     OrderFlowEvent?
+  decisions     Decision[]
+}
+
+model OrderFlowEvent {
+  id           String   @id @default(cuid())
+  signal       Signal?  @relation(fields: [signalId], references: [id])
+  signalId     String?  @unique
+  source       String
+  payload      Json
+  capturedAt   DateTime @default(now())
+  ingestedBy   String
+  hash         String   @unique
+}
+
+model Decision {
+  id          String   @id @default(cuid())
+  signal      Signal   @relation(fields: [signalId], references: [id], onDelete: Cascade)
+  signalId    String
+  actor       String
+  rationale   String
+  nextAction  String
+  confidence  Float
+  createdAt   DateTime @default(now())
+}
+
+model Session {
+  id          String          @id @default(cuid())
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  startedAt   DateTime        @default(now())
+  endedAt     DateTime?
+  context     Json
+  memories    SessionMemory[]
+}
+
+model SessionMemory {
+  id           String   @id @default(cuid())
+  session      Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId    String
+  embedding    Bytes
+  content      String
+  metadata     Json
+  createdAt    DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  user      User?    @relation(fields: [userId], references: [id])
+  userId    String?
+  action    String
+  resource  String
+  metadata  Json
+  createdAt DateTime @default(now())
+}
